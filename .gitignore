@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Yerel veri (kisisel gorevler, fikirler, loglar) — repoya girmez
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.log
+data/*.log.1
+data/fikirler.md
+data/pano.md
+data/uyelikler.json
+data/*.lock
+data/*.tmp
+
+# Makineye ozel uretilmis baslatma betigi (python yolu icerir)
+start_boot.vbs
+
+# Kisisel makine yapilandirmasi (repoyu herkese acik yayinliyorsak yollar gizli kalir)
+config.json
+
+# Masaustu pencere (pywebview) yerel depolamasi
+.webview/

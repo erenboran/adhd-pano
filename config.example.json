@@ -1,0 +1,41 @@
+{
+  "port": 5077,
+  "host": "127.0.0.1",
+  "cache_ttl_sec": 60,
+  "discovery_ttl_sec": 300,
+  "scan_workers": 4,
+  "git_timeout_sec": 20,
+  "scan_maxdepth": 3,
+  "yapilanlar_days": 7,
+  "yapilanlar_limit": 60,
+  "commits_per_repo": 25,
+  "ideas_limit": 200,
+
+  "_aciklama_roots": "Olculmesini istedigin git klasorleri. Bos birakilirsa hicbir repo taranmaz.",
+  "roots": [],
+  "root_depths": {},
+  "archived": [],
+  "active_hint": [],
+  "scan_skip_dirs": [
+    "System Volume Information",
+    "$RECYCLE.BIN",
+    "Library",
+    "Temp",
+    "obj",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".cache",
+    "Build",
+    "Builds",
+    "Logs",
+    ".vs"
+  ],
+
+  "github": {
+    "enabled": true,
+    "timeout_sec": 15,
+    "repos_limit": 15
+  }
+}

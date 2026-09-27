@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADHD — kontrol panosu</title>
+<!-- Dis bagimlilik yok: font, css, js hepsi yerel (static/). CDN/internet kullanilmaz. -->
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <span class="brand-text">ADHD<small>pano</small></span>
+    </div>
+
+    <nav class="nav" id="nav" aria-label="Sayfalar">
+      <button class="nav-item is-active" data-page="bugun" title="Bugün (1)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+        <span>Bugün</span><span class="badge" id="badge-bugun"></span>
+      </button>
+      <button class="nav-item" data-page="fikirler" title="Fikirler (2)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5.9 1.2.9 1.9v.3h5.4v-.3c0-.7.3-1.4.9-1.9A6 6 0 0 0 12 3Z"/></svg>
+        <span>Fikirler</span><span class="badge" id="badge-fikirler"></span>
+      </button>
+      <button class="nav-item" data-page="projeler" title="Projeler (3)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+        <span>Projeler</span><span class="badge" id="badge-projeler"></span>
+      </button>
+      <button class="nav-item" data-page="yapilanlar" title="Yapılanlar (4)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2"/></svg>
+        <span>Yapılanlar</span><span class="badge" id="badge-yapilanlar"></span>
+      </button>
+      <button class="nav-item" data-page="sistem" title="Sistem (5)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18v-6M9 18V6M14 18v-9M19 18v-4"/></svg>
+        <span>Sistem</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="status-mini" id="status-mini">bağlanıyor…</div>
+      <div class="side-actions">
+        <button class="icon-btn" id="btn-refresh" title="Taramayı yenile (r)">↻</button>
+        <button class="icon-btn" id="btn-theme" title="Açık / koyu tema">◐</button>
+        <button class="icon-btn" id="btn-help" title="Kısayollar (?)">?</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="now" id="now-strip" title="Tek odak — değiştirmek için tıkla">
+      <span class="now-label">ŞU AN</span>
+      <span class="now-text" id="now-text">yükleniyor…</span>
+      <span class="now-hint">tıkla → yaz → Enter</span>
+    </header>
+
+    <main id="pages">
+
+      <!-- ------------------------------------------------------------ BUGÜN -->
+      <section class="page" id="page-bugun" data-page="bugun">
+        <div class="page-head">
+          <h1>Bugün</h1>
+          <p class="page-sub" id="bugun-sub">tek seferde tek görev — gerisi zaten listede.</p>
+        </div>
+
+        <div class="stats" id="stats">
+          <div class="stat"><span class="stat-num" id="stat-open">–</span><span class="stat-label">açık görev</span></div>
+          <div class="stat"><span class="stat-num" id="stat-done">–</span><span class="stat-label">bugün biten</span></div>
+          <div class="stat"><span class="stat-num" id="stat-ideas">–</span><span class="stat-label">fikir</span></div>
+          <div class="stat"><span class="stat-num" id="stat-projects">–</span><span class="stat-label">aktif proje</span></div>
+        </div>
+
+        <div class="panel">
+          <h2>Yeni görev <span class="kbd">t</span></h2>
+          <form class="capture" id="task-form" autocomplete="off">
+            <input id="task-input" type="text" maxlength="300" placeholder="Ne yapacaksın? Enter ile ekle">
+            <input id="task-project" type="text" maxlength="60" placeholder="proje (isteğe bağlı)">
+            <button class="btn primary" type="submit">Ekle</button>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h2>Açık görevler <span class="meta" id="tasks-meta"></span></h2>
+          <ul class="rows" id="tasks"></ul>
+        </div>
+
+        <div class="panel">
+          <h2>Tamamlananlar <span class="meta" id="done-meta"></span></h2>
+          <ul class="rows" id="tasks-done"></ul>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- FİKİRLER -->
+      <section class="page is-hidden" id="page-fikirler" data-page="fikirler">
+        <div class="page-head">
+          <h1>Fikirler</h1>
+          <p class="page-sub">Aklına düşeni 2 saniyede yakala, sonra düşünürsün. Kayıt <code>data/fikirler.md</code> dosyasına da yazılır.</p>
+        </div>
+
+        <div class="panel">
+          <h2>Hızlı kayıt <span class="kbd">i</span></h2>
+          <form class="capture" id="idea-form" autocomplete="off">
+            <input id="idea-input" type="text" maxlength="500" placeholder="Fikir yaz, Enter'a bas…">
+            <button class="btn primary" type="submit">Kaydet</button>
+          </form>
+          <input id="idea-search" class="search" type="search" placeholder="Fikirlerde ara… (canlı filtre)">
+        </div>
+
+        <div class="panel">
+          <h2>Kayıtlar <span class="meta" id="ideas-meta"></span></h2>
+          <ul class="rows" id="ideas"></ul>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------- PROJELER -->
+      <section class="page is-hidden" id="page-projeler" data-page="projeler">
+        <div class="page-head">
+          <h1>Projeler</h1>
+          <p class="page-sub" id="projects-sub">git ölçümü salt okunur; hiçbir repoya yazılmaz.</p>
+        </div>
+        <div class="panel">
+          <div class="scroll">
+            <table id="projects">
+              <thead>
+                <tr><th>Proje</th><th>Branch</th><th>Değişen</th><th>Son commit</th><th>7g</th><th>Kaynak</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- YAPILANLAR -->
+      <section class="page is-hidden" id="page-yapilanlar" data-page="yapilanlar">
+        <div class="page-head">
+          <h1>Yapılanlar</h1>
+          <p class="page-sub" id="yapilanlar-sub">son günlerde attığın commit'ler — en yeni üstte.</p>
+        </div>
+        <div class="panel">
+          <h2>Commit akışı <span class="meta" id="yapilanlar-meta"></span></h2>
+          <ul class="commits" id="yapilanlar"></ul>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------------ SİSTEM -->
+      <section class="page is-hidden" id="page-sistem" data-page="sistem">
+        <div class="page-head">
+          <h1>Sistem</h1>
+          <p class="page-sub">GitHub hesabı, üyelikler, tarama ölçümleri ve Hermes dışa aktarımı.</p>
+        </div>
+
+        <div class="grid3">
+          <div class="box">
+            <h3>GitHub (gh CLI, salt okunur)</h3>
+            <div id="gh-body">yükleniyor…</div>
+          </div>
+          <div class="box">
+            <h3>Üyelikler (data/uyelikler.json)</h3>
+            <div id="uyelik-body">yükleniyor…</div>
+          </div>
+          <div class="box">
+            <h3>Tarama</h3>
+            <div id="scan-body">ilk tarama sürüyor…</div>
+          </div>
+        </div>
+
+        <div class="box">
+          <h3>Hermes / ajanlar için dışa aktarım</h3>
+          <div id="export-body">yükleniyor…</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<div id="toast" class="toast is-hidden"></div>
+
+<div id="help" class="modal is-hidden" role="dialog" aria-modal="true" aria-label="Kısayollar">
+  <div class="modal-card">
+    <h2>Kısayollar <button class="icon-btn" id="help-close" title="Kapat (Esc)">×</button></h2>
+    <table class="kbd-table">
+      <tr><td><span class="kbd">1</span>…<span class="kbd">5</span></td><td>sayfa değiştir</td></tr>
+      <tr><td><span class="kbd">t</span></td><td>görev kutusuna odaklan</td></tr>
+      <tr><td><span class="kbd">i</span></td><td>fikir kutusuna odaklan</td></tr>
+      <tr><td><span class="kbd">n</span></td><td>«ŞU AN» görevini düzenle</td></tr>
+      <tr><td><span class="kbd">r</span></td><td>taramayı yenile</td></tr>
+      <tr><td><span class="kbd">?</span></td><td>bu pencere</td></tr>
+      <tr><td><span class="kbd">Esc</span></td><td>vazgeç / kapat</td></tr>
+      <tr><td><span class="kbd">Enter</span></td><td>kaydet</td></tr>
+    </table>
+    <p class="hint">Pano verisi <code>data/adhd.db</code>, fikirler ayrıca <code>data/fikirler.md</code>,
+      ajanlar için anlık özet <code>data/pano.md</code> dosyasında.</p>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
