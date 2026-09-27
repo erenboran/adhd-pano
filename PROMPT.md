@@ -25,6 +25,9 @@ baştan sona oku, sonra uygula. Çelişki varsa spec kazanır.
   (vanilla JS, **tek `fetch(` noktası**: `api()` fonksiyonu), API → `app.py` içindeki
   `App.r_*` metodları, kalıcı veri → `db.py`.
 - Yazma sonrası `self.write_export()` çağrısını unutma (aksi halde `data/pano.md` bayat kalır).
+- Görev alanı ekleyeceksin → `db.py` içinde `TASK_COLUMNS` + gerekirse `_migrate`,
+  sonra `app.py::_task_flags`, arayüz çipi ve smoke test'in **bölüm 9**'una kontrol
+  ekle. `ALTER TABLE` mevcut DB'de veri kaybetmemeli.
 
 ## Sınırlar (ihlali = görev başarısız)
 

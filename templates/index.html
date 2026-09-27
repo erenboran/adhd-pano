@@ -40,6 +40,26 @@
       </button>
     </nav>
 
+    <div class="side-clock" id="side-clock" title="Zamanı görünür kıl (zaman körlüğü)">
+      <div class="clock-time" id="clock-time">--:--</div>
+      <div class="clock-date" id="clock-date">—</div>
+      <div class="daybar" aria-hidden="true"><div class="daybar-fill" id="daybar-fill"></div></div>
+      <div class="clock-meta" id="clock-meta">gün yükleniyor…</div>
+    </div>
+
+    <div class="focus-box" id="focus-box">
+      <div class="focus-head">
+        <span class="focus-label">ODAK</span>
+        <span class="focus-min" id="focus-min">25 dk</span>
+      </div>
+      <div class="focus-time" id="focus-time">--:--</div>
+      <div class="focus-task" id="focus-task">oturum yok</div>
+      <div class="focus-actions">
+        <button class="btn tiny primary" id="btn-focus-start" title="25 dakikalık odak oturumu başlat (f)">başlat</button>
+        <button class="btn tiny" id="btn-focus-stop">bitir</button>
+      </div>
+    </div>
+
     <div class="sidebar-foot">
       <div class="status-mini" id="status-mini">bağlanıyor…</div>
       <div class="side-actions">
@@ -69,6 +89,9 @@
         <div class="stats" id="stats">
           <div class="stat"><span class="stat-num" id="stat-open">–</span><span class="stat-label">açık görev</span></div>
           <div class="stat"><span class="stat-num" id="stat-done">–</span><span class="stat-label">bugün biten</span></div>
+          <div class="stat" id="stat-streak-box" title="Arka arkaya en az 1 görev bitirdiğin gün sayısı">
+            <span class="stat-num" id="stat-streak">–</span><span class="stat-label">günlük seri 🔥</span>
+          </div>
           <div class="stat"><span class="stat-num" id="stat-ideas">–</span><span class="stat-label">fikir</span></div>
           <div class="stat"><span class="stat-num" id="stat-projects">–</span><span class="stat-label">aktif proje</span></div>
         </div>
@@ -79,7 +102,30 @@
             <input id="task-input" type="text" maxlength="300" placeholder="Ne yapacaksın? Enter ile ekle">
             <input id="task-project" type="text" maxlength="60" placeholder="proje (isteğe bağlı)">
             <button class="btn primary" type="submit">Ekle</button>
+            <input id="task-firststep" type="text" maxlength="200"
+                   placeholder="İlk fiziksel adım — başlatmayı kırar (ör. «docx'i aç»)">
           </form>
+
+          <details class="detay" id="task-detay">
+            <summary>detay: uyarı (eğer–then) · süre · son tarih</summary>
+            <div class="detay-grid">
+              <label class="fld">
+                <span>Uyarı <em>eğer–then</em></span>
+                <input id="task-cue" type="text" maxlength="200"
+                       placeholder="«Öğle yemeği biter bitmez raporu aç»">
+              </label>
+              <label class="fld">
+                <span>Tahmin (dk)</span>
+                <input id="task-estimate" type="number" min="1" max="600" placeholder="25">
+              </label>
+              <label class="fld">
+                <span>Son tarih</span>
+                <input id="task-due" type="datetime-local">
+              </label>
+            </div>
+            <p class="hint">Boş bırakılan alan kaydedilmez. <b>Eğer–then</b> saate değil
+              <b>olaya</b> bağlandığında en güçlü çalışıyor.</p>
+          </details>
         </div>
 
         <div class="panel">
@@ -187,6 +233,7 @@
       <tr><td><span class="kbd">t</span></td><td>görev kutusuna odaklan</td></tr>
       <tr><td><span class="kbd">i</span></td><td>fikir kutusuna odaklan</td></tr>
       <tr><td><span class="kbd">n</span></td><td>«ŞU AN» görevini düzenle</td></tr>
+      <tr><td><span class="kbd">f</span></td><td>25 dk odak oturumu başlat / bitir</td></tr>
       <tr><td><span class="kbd">r</span></td><td>taramayı yenile</td></tr>
       <tr><td><span class="kbd">?</span></td><td>bu pencere</td></tr>
       <tr><td><span class="kbd">Esc</span></td><td>vazgeç / kapat</td></tr>

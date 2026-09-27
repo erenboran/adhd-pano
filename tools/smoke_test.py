@@ -242,6 +242,84 @@ def main() -> int:
               "yoksa app.py otomatik tarayiciya duser")
         check("pywebview kuruldu (kurulu degilse tarayici moduna duser)", adhd.pywebview_installed(),
               "kurulum: D:/ADHD/setup.cmd")
+
+        # ---------------------------------------------------- 9) ADHD OZELLIKLERI
+        print("\n9) ADHD OZELLIKLERI — zaman gorunurlugu, ilk adim, uyari, odak, seri")
+        # (P1) arayuzde canli saat + gun ilerlemesi var mi?
+        _, _, html_b = raw("/")
+        html_txt = html_b.decode("utf-8", "replace")
+        check("arayuzde canli saat kutusu var", 'id="clock-time"' in html_txt)
+        check("arayuzde gun ilerleme cubugu var", 'id="daybar-fill"' in html_txt)
+        check("arayuzde odak kutusu var", 'id="focus-box"' in html_txt)
+        js_b = (BASE / "static" / "app.js").read_text(encoding="utf-8")
+        check("JS saniyelik tick() dongusu var", "setInterval(tick, 1000)" in js_b)
+
+        # (P2+P3+P6) gorev alanlari: ilk adim / uyari / tahmin / son tarih
+        _, t2, _ = call("/api/tasks", {
+            "text": "adhd ozellik testi", "project": "ADHD",
+            "first_step": "bos docx'i ac", "cue": "ogle yemegi bitince",
+            "estimate_min": 25, "due_at": "2026-09-28T18:00",
+        })
+        tk = t2.get("task") or {}
+        tid2 = tk.get("id")
+        check("gorev 4 ADHD alaniyla eklendi",
+              tk.get("first_step") == "bos docx'i ac" and tk.get("cue") == "ogle yemegi bitince"
+              and tk.get("estimate_min") == 25 and tk.get("due_at") == "2026-09-28T18:00",
+              str(tk))
+        _, up, upc = call(f"/api/tasks/{tid2}/update", {"first_step": "yeni ilk adim", "estimate_min": None})
+        check("gorev alani guncellendi (None = temizle)", upc == 200
+              and up["task"]["first_step"] == "yeni ilk adim" and up["task"]["estimate_min"] is None)
+        _, up2, upc2 = call(f"/api/tasks/{tid2}/update", {"estimate_min": 9999})
+        check("tahmin sinir disi reddedilir/None yapildi",
+              upc2 == 200 and up2["task"]["estimate_min"] is None, str(up2["task"]))
+
+        # (P1) baslatma → gecen sure
+        _, st1, _ = call(f"/api/tasks/{tid2}/start", {"on": True}, method="POST")
+        check("gorev baslatildi (started_at dolu)", bool(st1["task"].get("started_at")),
+              str(st1["task"].get("started_at")))
+        _, st2, _ = call(f"/api/tasks/{tid2}/start", {"on": False}, method="POST")
+        check("gorev duraklatildi (started_at None)", st2["task"].get("started_at") is None)
+
+        # (P4) odak oturumu
+        _, f1, _ = call("/api/focus/start", {"minutes": 25, "task_id": tid2})
+        foc = f1.get("focus") or {}
+        check("odak oturumu basladi", foc.get("active") is True and 0 < (foc.get("remaining_sec") or 0) <= 1500,
+              f"{foc.get('remaining_sec')} sn")
+        check("odak gorev metnini aldi", foc.get("task_text") == "adhd ozellik testi", str(foc.get("task_text")))
+        _, st3, _ = call("/api/state")
+        check("state odak + seri dondurur", isinstance(st3.get("focus"), dict) and isinstance(st3.get("streak"), dict),
+              f"focus={st3.get('focus', {}).get('active')} streak={st3.get('streak', {}).get('streak')}")
+        open_tasks = st3.get("tasks") or []
+        check("state gorevlerde yeni alanlar var",
+              all(k in open_tasks[0] for k in ("first_step", "cue", "estimate_min", "started_at", "due_at")),
+              ", ".join(open_tasks[0].keys()) if open_tasks else "gorev yok")
+        _, f2, _ = call("/api/focus/stop", {}, method="POST")
+        check("odak kapatildi", f2["focus"].get("active") is False)
+
+        # (P5) seri
+        check("seri verisi anlamlı", st3["streak"].get("streak", -1) >= 0
+              and isinstance(st3["streak"].get("today_done"), int), str(st3["streak"]))
+
+        # export'a yeni alanlar yansidi mi?
+        _, _, exp2 = raw("/api/export")
+        exp_txt = exp2.decode("utf-8", "replace")
+        check("export'ta 'Odak / seri' bolumu var", "## Odak / seri" in exp_txt)
+        check("export'ta gorev bayraklari var", "ilk adim:" in exp_txt,
+              "yok" if "ilk adim:" not in exp_txt else "var")
+
+        # hatali girisler
+        _, _, c_b = call("/api/tasks", {"text": "x" * 400})
+        check("400 karakter ustu gorev reddedildi", c_b == 400, f"HTTP {c_b}")
+        _, _, c_404 = call("/api/focus/start", {"minutes": 25, "task_id": 999999})
+        check("olmayan gorevle odak 404", c_404 == 404, f"HTTP {c_404}")
+        _, _, c_upd = call("/api/tasks/999999/update", {"first_step": "yok"})
+        check("olmayan gorev guncelleme 404", c_upd == 404, f"HTTP {c_upd}")
+
+        # temizlik — test verisi geride kalmasin
+        call("/api/focus/stop", {}, method="POST")
+        call(f"/api/tasks/{tid2}", method="DELETE")
+        _, st4, _ = call("/api/state")
+        check("test görevi silindi", not any(t["text"] == "adhd ozellik testi" for t in st4["tasks"]))
     finally:
         srv.shutdown()
         srv.server_close()

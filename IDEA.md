@@ -8,7 +8,7 @@ Tam dosya düzeni ve test adımları `README.md`'dedir; bu dosya davranış spec
 
 1. `127.0.0.1:5077`, CDN'siz tek sayfa, kanat çubuğu + 5 sayfa
    (Bugün / Fikirler / Projeler / Yapılanlar / Sistem) + üstte sabit «ŞU AN» şeridi.
-2. Veri: SQLite (`ideas`, `tasks`, `now_state`), fikir ayrıca `data/fikirler.md`'ye,
+2. Veri: SQLite (`ideas`, `tasks`, `now_state`, `focus`), fikir ayrıca `data/fikirler.md`'ye,
    ajan özeti her değişiklikte `data/pano.md` dosyasına atomik yazılır.
 3. `git` **salt-okunur** (`rev-parse`, `log`, `status`, `remote get-url`);
    `gh` yalnız `auth status` / `api user` / `repo list`.
@@ -23,6 +23,13 @@ Tam dosya düzeni ve test adımları `README.md`'dedir; bu dosya davranış spec
    (Windows Başlangıç klasörüne `ADHD Pano.vbs`, konsolsuz, 4 sn gecikme).
 8. Masaüstü penceresi: `pywebview` + WebView2 (`edgechromium` zorlanır, IE'ye düşmez);
    kurulu değilse/pencere açılmazsa otomatik tarayıcıya düşer.
+9. **ADHD özellikleri kalıcıdır** (hepsi isteğe bağlı alan, boşsa çip görünmez):
+   kanat çubuğunda saniyelik saat + gün ilerleme çubuğu; görevde `first_step`
+   (ilk fiziksel adım), `cue` (eğer–then), `estimate_min`, `started_at`, `due_at`;
+   25 dk odak oturumu (`focus` tablosu, bitince «süre doldu ✓» kapatılana dek durur);
+   günlük `streak`. Yeni alan `db.py::_migrate` üzerinden eklenir (mevcut DB'ye
+   `ALTER TABLE`, veri kaybı yasak), export'a `## Odak / seri` bölümü ve
+   `_task_flags()` ile yansır, smoke test'in **bölüm 9**'u bunları doğrular.
 
 ## Test kapısı
 

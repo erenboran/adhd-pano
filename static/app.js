@@ -17,6 +17,10 @@ const state = {
   ideaFilter: "",
   flashTask: null,
   pollMs: 60000,
+  serverOffset: 0,     // sunucu saati - yerel saat (ms); geri sayimda kayma olmasin)
+  focusEnd: null,      // odak bitis ani (ms)
+  focusEndFired: false, // sure doldugunda load() bir kez cagirildi mi
+  focusDoneShown: false, // "sure doldu" bildirimi bir kez gosterildi mi
 };
 
 const $ = (s) => document.querySelector(s);
@@ -51,6 +55,22 @@ function localDayKey(d) {
   const p = (n) => String(n).padStart(2, "0");
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 }
+/* sunucu saatiyle hizali (geri sayimlar kaymasin) */
+function serverNow() { return new Date(Date.now() + state.serverOffset); }
+function p2(n) { return String(n).padStart(2, "0"); }
+function fmtClock(d) { return p2(d.getHours()) + ":" + p2(d.getMinutes()); }
+function fmtMMSS(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h > 0 ? h + ":" + p2(m) + ":" + p2(s) : p2(m) + ":" + p2(s);
+}
+/* gunun kacagi gecti — dissal zaman cuprusu (zaman koprlugu) */
+function dayProgress(d) {
+  return ((d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 86400) * 100;
+}
+const GUNLER = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+const AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 function val(v) { return (v === null || v === undefined || v === "") ? UNKNOWN : v; }
 function isUnknown(v) { return v === null || v === undefined || v === ""; }
 function unknownTxt(text) { return el("span", "unknown", text || UNKNOWN); }
@@ -124,6 +144,20 @@ function renderStats(d) {
   $("#stat-ideas").textContent = String(d.idea_count || 0);
   $("#stat-projects").textContent = String((d.projects || []).length);
   $("#stat-done").parentElement.classList.toggle("is-good", doneToday > 0);
+
+  // seri (streak) — ani, gorunur odul
+  const st = d.streak || {};
+  const n = st.streak || 0;
+  $("#stat-streak").textContent = n ? String(n) : "0";
+  const box = $("#stat-streak-box");
+  box.classList.toggle("is-hot", n >= 3);
+  box.classList.toggle("is-good", !!st.active_today && n >= 1);
+  box.title = n
+    ? (st.active_today
+        ? "Bugün " + (st.today_done || 0) + " görev bitirdin — seri " + n + " gün."
+        : "Seri " + n + " gün ama bugün henüz biten görev yok.")
+    : "Seri yok — bugün biten 1 görev seri başlatır.";
+
   $("#bugun-sub").textContent = open === 0
     ? "Açık görev yok — bugünün listesi boş. İstersen fikirlerine bak."
     : open + " açık görev var. Hepsini değil, yalnız birini seç.";
@@ -164,9 +198,29 @@ function taskRow(t) {
     } catch (e) { toast("güncellenemedi: " + e.message, true); }
   };
   li.appendChild(cb);
-  li.appendChild(el("span", "txt", t.text));
+
+  const wrap = el("div", "twrap");
+  wrap.appendChild(el("span", "txt", t.text));
+  const meta = el("div", "tmeta");
+  for (const c of taskChips(t)) meta.appendChild(c);
+  wrap.appendChild(meta);
+  li.appendChild(wrap);
+
   if (t.project) li.appendChild(el("span", "who", t.project));
   if (t.done && t.done_at) li.appendChild(el("span", "when", fmtDate(t.done_at)));
+
+  const f = (state.data && state.data.focus) || {};
+  const mine = f.active && f.task_id === t.id;
+  const fb = el("button", "focus-btn" + (mine ? " on" : ""), mine ? "◉ " + fmtMMSS(f.remaining_sec) : "◉ odak");
+  fb.title = mine ? "bu görevde odak oturumu sürüyor" : "25 dk odak oturumu başlat";
+  fb.onclick = async () => {
+    try {
+      if (mine) { await api("POST", "/api/focus/stop"); toast("odak kapatıldı"); }
+      else { await api("POST", "/api/focus/start", { task_id: t.id, minutes: 25 }); toast("25 dk odak başladı"); }
+      await load();
+    } catch (e) { toast("odak başlatılamadı: " + e.message, true); }
+  };
+  li.appendChild(fb);
 
   const del = el("button", "del", "×");
   del.title = "sil";
@@ -176,6 +230,118 @@ function taskRow(t) {
   };
   li.appendChild(del);
   return li;
+}
+
+/* ------------------------------------------------------------- gorev cipleri */
+function chip(label, cls, title, onClick) {
+  const c = el("span", "chip" + (cls ? " " + cls : ""), label);
+  if (title) c.title = title;
+  if (onClick) { c.tabIndex = 0; c.onclick = onClick;
+    c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onClick(); } }; }
+  return c;
+}
+
+/* satir icinde alan duzenleme — Enter kaydeder, Esc iptal eder */
+function editChip(c, t, field, placeholder, numeric) {
+  let closing = false;
+  const input = el("input");
+  input.type = numeric ? "number" : "text";
+  if (numeric) { input.min = "1"; input.max = "600"; }
+  input.value = (t[field] === null || t[field] === undefined) ? "" : String(t[field]);
+  input.placeholder = placeholder;
+  clear(c);
+  c.classList.add("chip-edit");
+  c.appendChild(input);
+  input.focus();
+
+  const finish = async (save) => {
+    if (closing) return;
+    closing = true;
+    let v = input.value;
+    if (numeric) v = v.trim() === "" ? null : Number(v);
+    if (save) {
+      try {
+        await api("POST", "/api/tasks/" + t.id + "/update", { [field]: v });
+        toast(field === "first_step" ? "ilk adım kaydedildi" : "görev güncellendi");
+      } catch (e) { toast("kaydedilemedi: " + e.message, true); }
+    }
+    load();
+  };
+  input.onkeydown = (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+    else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+}
+
+function taskChips(t) {
+  const out = [];
+  const add = (label, cls, title, makeEditor) => {
+    const c = chip(label, cls, title, null);
+    if (makeEditor) {
+      c.tabIndex = 0;
+      const run = () => makeEditor(c);
+      c.onclick = run;
+      c.onkeydown = (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); run(); }
+      };
+    }
+    out.push(c);
+    return c;
+  };
+
+  // 1) ilk fiziksel adim — baslatma arizasini kirar (bosken cagri yapar)
+  if (t.first_step) {
+    add("▶ " + t.first_step, "first", "İlk adım: " + t.first_step + " · tıkla → düzenle",
+      (c) => editChip(c, t, "first_step", "ilk fiziksel adım"));
+  } else if (!t.done) {
+    add("+ ilk adım", "first chip-empty", "Görevi başlatmadan önce ilk fiziksel adımı yaz",
+      (c) => editChip(c, t, "first_step", "ilk fiziksel adım"));
+  }
+
+  // 2) eger-then uyari — prospective memory, en guclu kanit
+  if (t.cue) {
+    add("⟡ " + t.cue, "cue", "Uyarı: " + t.cue + " · tıkla → düzenle",
+      (c) => editChip(c, t, "cue", "Öğle yemeği biter bitmez…"));
+  }
+
+  // 3) tahmini sure — zaman koprlugu
+  if (t.estimate_min) {
+    add("⏱ " + t.estimate_min + " dk", "est", "Tahmin · tıkla → düzenle",
+      (c) => editChip(c, t, "estimate_min", "25", true));
+  }
+
+  // 4) gecen sure — baslatildiysa calisir
+  if (t.started_at && !t.done) {
+    const mins = Math.max(0, Math.round((Date.now() - new Date(t.started_at).getTime()) / 60000));
+    const over = t.estimate_min && mins > t.estimate_min;
+    add("▶ " + (mins < 1 ? "az önce başladı" : "başlayalı " + mins + " dk"),
+      "run" + (over ? " over-est" : ""),
+      over ? "Tahmini aşıldı — dur, mola ver" : "Çalışıyor · tıkla → duraklat",
+      async () => {
+        try { await api("POST", "/api/tasks/" + t.id + "/start", { on: false }); load(); }
+        catch (e) { toast("duraklatılamadı: " + e.message, true); }
+      });
+  }
+
+  // 5) son tarih — acilyet (ilgi-temelli sinir sistemi)
+  if (t.due_at) {
+    const due = new Date(t.due_at);
+    const over = !isNaN(due.getTime()) && due.getTime() < Date.now();
+    const lbl = over ? "geçti " + fmtAgo(t.due_at) : "son " + fmtDate(t.due_at).slice(0, 16);
+    add(lbl, "due" + (over ? " over" : ""), "Son tarih · tıkla → düzenle",
+      (c) => editChip(c, t, "due_at", "2026-09-28T18:00"));
+  }
+
+  // baslatma dugmesi (saglikli gorevlerde sureyi isaretle)
+  if (!t.done && !t.started_at) {
+    add("▶ başlat", "chip-empty", "Süreyi başlat — geçen süre görünür",
+      async () => {
+        try { await api("POST", "/api/tasks/" + t.id + "/start", { on: true }); load(); }
+        catch (e) { toast("başlatılamadı: " + e.message, true); }
+      });
+  }
+  return out;
 }
 
 function renderIdeas(d) {
@@ -396,6 +562,86 @@ function renderExport(d) {
   kv(box, "Not", "Görev / fikir / «ŞU AN» her değişiklikte bu dosyaya yazılır; Hermes buradan okur.");
 }
 
+/* ------------------------------------------------- zaman gorunurlugu + odak */
+function remainingFocusMs() {
+  if (!state.focusEnd) return 0;
+  return Math.max(0, state.focusEnd - serverNow().getTime());
+}
+
+function renderFocus() {
+  const f = (state.data && state.data.focus) || {};
+  const box = $("#focus-box");
+  if (!box) return;
+  box.classList.toggle("is-live", !!f.active);
+  box.classList.toggle("is-done", !!f.finished && !f.active);
+  const timeEl = $("#focus-time"), taskEl = $("#focus-task");
+  const startBtn = $("#btn-focus-start"), stopBtn = $("#btn-focus-stop"), minEl = $("#focus-min");
+  minEl.textContent = (f.minutes || 25) + " dk";
+
+  if (f.active) {
+    state.focusEnd = f.ends_at ? new Date(f.ends_at).getTime()
+      : (state.focusEnd || (Date.now() + (f.remaining_sec || 0) * 1000));
+    state.focusEndFired = false;
+    state.focusDoneShown = false;
+    timeEl.textContent = fmtMMSS(remainingFocusMs() / 1000);
+    taskEl.textContent = f.task_text || "odak";
+    startBtn.classList.add("is-hidden");
+    stopBtn.textContent = "bitir";
+  } else if (f.finished) {
+    state.focusEnd = null;
+    timeEl.textContent = "süre doldu ✓";
+    taskEl.textContent = (f.task_text ? f.task_text + " · " : "") + "mola ver — seri devam ediyor";
+    startBtn.classList.remove("is-hidden");
+    stopBtn.textContent = "kapat";
+    if (!state.focusDoneShown) {
+      state.focusDoneShown = true;
+      toast("odak süresi doldu — kalk, mola ver 🎉");
+    }
+  } else {
+    state.focusEnd = null;
+    state.focusEndFired = false;
+    state.focusDoneShown = false;
+    timeEl.textContent = "--:--";
+    taskEl.textContent = "oturum yok · «odak başlat» ya da f";
+    startBtn.classList.remove("is-hidden");
+    stopBtn.textContent = "bitir";
+  }
+}
+
+function tick() {
+  const now = new Date();
+  const t = $("#clock-time");
+  if (t) t.textContent = p2(now.getHours()) + ":" + p2(now.getMinutes()) + ":" + p2(now.getSeconds());
+
+  const secs = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  const pct = (secs / 86400) * 100;
+  const fill = $("#daybar-fill");
+  if (fill) fill.style.width = pct.toFixed(1) + "%";
+  const meta = $("#clock-meta");
+  if (meta) {
+    const left = 86400 - secs;
+    meta.textContent = "günün %" + Math.round(pct) + "’i geçti · "
+      + Math.floor(left / 3600) + " sa " + Math.floor((left % 3600) / 60) + " dk kaldı";
+  }
+  const d = $("#clock-date");
+  if (d) d.textContent = now.getDate() + " " + AYLAR[now.getMonth()] + " " + GUNLER[now.getDay()];
+
+  // odak geri sayimi
+  if (state.data && state.data.focus && state.data.focus.active) {
+    const leftMs = remainingFocusMs();
+    const ft = $("#focus-time");
+    if (leftMs <= 0) {
+      if (!state.focusEndFired) { state.focusEndFired = true; load(); }
+    } else if (ft) {
+      ft.textContent = fmtMMSS(leftMs / 1000);
+      // gorev satirindaki odak dugmesi de ayni sayaci gosterir
+      document.querySelectorAll(".focus-btn.on").forEach((b) => {
+        b.textContent = "◉ " + fmtMMSS(leftMs / 1000);
+      });
+    }
+  }
+}
+
 function renderBadges(d) {
   const tasks = d.tasks || [];
   const set = (id, n, on) => {
@@ -431,9 +677,14 @@ async function load(force) {
   try {
     const d = await api("GET", "/api/state" + (force ? "?force=1" : ""));
     state.data = d;
+    if (d.server_time) {
+      const st = new Date(d.server_time).getTime();
+      if (!isNaN(st)) state.serverOffset = st - Date.now();
+    }
     state.pollMs = Math.max(15, ((d.config && d.config.cache_ttl_sec) || 60)) * 1000;
     renderNow(d.now);
     renderStats(d);
+    renderFocus();
     renderTasks(d);
     renderIdeas(d);
     renderProjects(d);
@@ -529,16 +780,40 @@ function wireForms() {
     ev.preventDefault();
     const input = $("#task-input");
     const proj = $("#task-project");
+    const first = $("#task-firststep");
+    const cue = $("#task-cue");
+    const est = $("#task-estimate");
+    const due = $("#task-due");
     const text = input.value.trim();
     if (!text) { input.focus(); return; }
     try {
-      await api("POST", "/api/tasks", { text: text, project: proj.value.trim() || undefined });
+      await api("POST", "/api/tasks", {
+        text: text,
+        project: proj.value.trim() || undefined,
+        first_step: first.value.trim() || undefined,
+        cue: cue.value.trim() || undefined,
+        estimate_min: est.value.trim() ? Number(est.value.trim()) : undefined,
+        due_at: due.value || undefined,
+      });
       input.value = "";
       proj.value = "";
+      first.value = "";
+      cue.value = "";
+      est.value = "";
+      due.value = "";
       input.focus();
       toast("görev eklendi");
       load();
     } catch (e) { toast("görev eklenemedi: " + e.message, true); }
+  });
+
+  // detay alanlari formun disinda; Enter orada da gorev eklemeli
+  ["#task-cue", "#task-estimate", "#task-due"].forEach((sel) => {
+    const n = $(sel);
+    if (!n) return;
+    n.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); $("#task-form").requestSubmit(); }
+    });
   });
 
   $("#idea-form").addEventListener("submit", async (ev) => {
@@ -574,6 +849,30 @@ function wireButtons() {
   $("#help").addEventListener("click", (ev) => { if (ev.target.id === "help") toggleHelp(false); });
   $("#btn-theme").addEventListener("click", () => setTheme(
     document.documentElement.dataset.theme === "light" ? "dark" : "light"));
+
+  // odak oturumu (yan kenar cubugu)
+  $("#btn-focus-start").addEventListener("click", async () => {
+    try {
+      await api("POST", "/api/focus/start", { minutes: 25 });
+      toast("25 dk odak başladı — geri sayım kenarda");
+      load();
+    } catch (e) { toast("odak başlatılamadı: " + e.message, true); }
+  });
+  $("#btn-focus-stop").addEventListener("click", async () => {
+    try { await api("POST", "/api/focus/stop"); state.focusDoneShown = true; toast("odak kapatıldı"); load(); }
+    catch (e) { toast("kapatılamadı: " + e.message, true); }
+  });
+}
+
+function toggleFocus() {
+  const f = (state.data && state.data.focus) || {};
+  if (f.active) {
+    api("POST", "/api/focus/stop").then(() => { toast("odak kapatıldı"); load(); })
+      .catch((e) => toast("kapatılamadı: " + e.message, true));
+  } else {
+    api("POST", "/api/focus/start", { minutes: 25 }).then(() => { toast("25 dk odak başladı"); load(); })
+      .catch((e) => toast("odak başlatılamadı: " + e.message, true));
+  }
 }
 
 function toggleHelp(force) {
@@ -608,6 +907,7 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "t") { ev.preventDefault(); goto("bugun", "#task-input"); return; }
   if (ev.key === "i") { ev.preventDefault(); goto("fikirler", "#idea-input"); return; }
   if (ev.key === "n") { ev.preventDefault(); startNowEdit(); return; }
+  if (ev.key === "f") { ev.preventDefault(); toggleFocus(); return; }
   if (ev.key === "r") { ev.preventDefault(); load(true); toast("tarama yenileniyor…"); }
 });
 
@@ -619,3 +919,5 @@ wireNav();
 wireButtons();
 goto(location.hash.slice(1) || "bugun");
 load(false);
+tick();                       // saati hemen goster
+setInterval(tick, 1000);      // zaman gorunur kalsin (zaman koprlugu)

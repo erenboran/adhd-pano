@@ -14,7 +14,7 @@ Fikirlerini, görevlerini ve aktif projelerini (git ölçümleri) tek yerde gör
 
 | Sayfa (kanat çubuğu) | Kaynak | Ne var |
 |---|---|---|
-| **Bugün** (varsayılan) | SQLite `tasks` | tek odak «ŞU AN» şeridi, 4 sayaç, açık/tamamlanan görevler, proje etiketi |
+| **Bugün** (varsayılan) | SQLite `tasks` | tek odak «ŞU AN» şeridi, 5 sayaç (seri dahil), açık/tamamlanan görevler, proje etiketi, ilk adım / uyarı / tahmin / son tarih çipleri |
 | **Fikirler** | SQLite + `data/fikirler.md` | hızlı kayıt (`i`), canlı arama, silme |
 | **Projeler** | `git` (salt okunur) | branch, değişen dosya, son commit, 7 günde commit, GitHub linki |
 | **Yapılanlar** | `git log --since=7.days` | son 7 günün commit'leri, en yeni üstte |
@@ -27,11 +27,30 @@ Fikirlerini, görevlerini ve aktif projelerini (git ölçümleri) tek yerde gör
 - Üstte sabit **«ŞU AN»**: tek görev, 21px, tıkla-yaz-Enter. Düzenleme sırasında
   anlık yenileme odak **kaçırmez** (JS bu alanı baypas eder).
 - Solda kalıcı kanat çubuğu → sayfa başına **tek iş**, listeler kısa ve gruplu.
-- Sayaçlar (açık görev / bugün biten / fikir / proje) motivasyon için; uydurma yok,
-  hepsi veritabanından gerçek sayı.
+- Sayaçlar (açık görev / bugün biten / günlük seri / fikir / proje) motivasyon için;
+  uydurma yok, hepsi veritabanından gerçek sayı.
 - Görev işaretlenince **hafif «pop»** animasyonu; `prefers-reduced-motion` ile kapanır.
 - Koyu tema varsayılan, ◐ ile açık tema (tercih `localStorage`+`.webview` içinde saklanır).
-- Klavye: `1-5` sayfa, `t` görev, `i` fikir, `n` ŞU AN, `r` yenile, `?` yardım, `Esc` kapat.
+- Klavye: `1-5` sayfa, `t` görev, `i` fikir, `n` ŞU AN, `f` odak, `r` yenile,
+  `?` yardım, `Esc` kapat.
+
+### Araştırmadan türetilen özellikler
+
+Kanat çubuğunun üstünde her an görünen **canli saat + gün ilerleme çubuğu**
+(«günün %88'i geçti»). Kanıt ve karşılığı:
+
+| Özellik | Yer | Ne işe yarar |
+|---|---|---|
+| **Canlı saat + gün çubuğu** | kanat çubuğu | Zaman körlüğü — süre görünür olunca başlama tetiklenir |
+| **`▶ başlat` / geçen süre** | görev satırı | Başlatma arızası + süre takibi; tahmini aşınca kırmızı |
+| **İlk fiziksel adım** (`first_step`) | çip, + görev formu | Barkley'in dışsallaştırma: «raporu yaz» değil «docx'i aç» |
+| **Eğer–then uyarısı** (`cue`) | çip | Prospective memory — en güçlü kanıtlanan müdahale (Rummel 2012). Saate değil **olaya** bağlanır |
+| **Tahmini süre** (`estimate_min`) | çip | Gerçek dışı tahmin fark edilir; kayma görünür hale gelir |
+| **Son tarih** (`due_at`) | çip | İlgi temelli sinir sistemi — yapay ama görünür aciliyet |
+| **25 dk odak oturumu** | kanat çubuğu, `f` | Süre bitince «süre doldu ✓» **kapatılana dek** ekranda kalır (dışsallaştırılmış hatırlatma) |
+| **Günlük seri 🔥** | 5. sayaç | Gün içinde 1 görev bitirmek seriyi başlatır; kırmızı değil, ödüllendirici renk |
+
+Tüm alanlar **isteğe bağlı** — boşsa çip hiç görünmez, pano sade halinde de çalışır.
 
 ## Kurulum (yeni makine)
 
@@ -94,7 +113,7 @@ D:\ADHD\
   app.py                  stdlib HTTP sunucusu + API + tarama + masaüstü pencere
   scanner.py              repo keşfi + git ölçümleri (salt okunur) + cache
   ghclient.py             `gh` salt-okunur çağrıları
-  db.py                   SQLite (ideas, tasks, now_state) + fikirler.md yazımı
+  db.py                   SQLite (ideas, tasks, now_state, focus) + fikirler.md yazımı
   config.json             senin makine yapılandırman (gitignore)
   config.example.json     temiz örnek (repo'da)
   templates/index.html    tek sayfa (kanat çubuğu + sayfalar)
@@ -123,7 +142,10 @@ python tools/startup_check.py     # kurulum + otomatik açılış doğrulaması
 Kapsadıkları: soğuk başlangıçta donma yok (<1 sn), gerçek repo/branch/commit verisi,
 cache TTL, zorla yenileme, fikir/görev/«ŞU AN» yazımı (`fikirler.md` + `pano.md`),
 404/405/path-traversal, timeout yolunda `bilinmiyor` davranışı, CDN referansı yok,
-WebView2 + pywebview hazır olup olmadığı.
+WebView2 + pywebview hazır olup olmadığı ve **bölüm 9**: ADHD özellikleri
+(saat/gün çubuğu/odak kutusu arayüzde var mı, 4 alanlı görev ekleme-güncelleme,
+`started_at` başlatma, odak oturumu başlattı-durdurdu, `streak` sözcüğü, export'ta
+`## Odak / seri` bölüm ve `ilk adim:` bayrağı, sınır dışı tahmin reddi, 404'ler).
 
 `startup_check.py` ayrıca şunları doğrular: `webview` (pywebview) import edilebiliyor,
 `gh` CLI sürümü, dosyalar UTF-8, README bölümleri, port 5077 + `server.lock` canlı mı,
@@ -153,6 +175,17 @@ hatasız. Çıktı `--json` ile makine-okunur; **`KALDI` yoksa çıkış 0**.
    pano konsolsuz kendiliğinden açılmalı. `uninstall` ile geri alınmalı.
 8. **Doğrulama raporu:** `python tools\startup_check.py` → **33 GECTI, 0 KALDI**
    görmelisin (autostart kurulu değilse ilgili satırlar `ATLANDI` olur, `KALDI` olmaz).
+9. **Zaman + odak özellikleri:**
+   - Kanat çubuğu üstünde saat **saniye saniye** değişmeli, gün çubuğu ilerlemeli.
+   - Göreve `+ ilk adım` çipine tıkla → `docx'i aç` → Enter. Çip mavi görünmeli,
+     `data/pano.md` içinde `ilk adim: docx'i ac` satırı olmalı.
+   - «detay: uyarı · süre · son tarih» aç → üçünü de doldur → Enter. Görev satırında
+     `⟡`, `⏱` ve sarı `son …` çipleri belirmeli. Çipe tıklayınca satır içinde düzenlenebilmeli.
+   - `▶ başlat` → `▶ başlayalı 1 dk` yeşil çipine dönmeli, `×` ile durdurulabilmeli.
+   - `f` ya da kanat çubuğundaki «başlat» → **ODAK** kutusu `25:00` saymaya başlamalı,
+     mavi kenara dönmeli. 25 dk sonunda «süre doldu ✓» görünmeli ve **`kapat`a
+     basmadan kaybolmamalı**.
+   - Bir görevi bitir → 5. sayaç «günlük seri 🔥» `0`'dan `1`'e dönmeli.
 
 ## API
 
@@ -164,7 +197,13 @@ hatasız. Çıktı `--json` ile makine-okunur; **`KALDI` yoksa çıkış 0**.
 | `POST /api/refresh` | taramayı tazele (arka planda) |
 | `POST /api/ideas` `DELETE /api/ideas/<id>` | fikir ekle / sil (DB + `fikirler.md` + `pano.md`) |
 | `POST /api/tasks` `POST /api/tasks/<id>/toggle` `DELETE /api/tasks/<id>` | görevler |
+| `POST /api/tasks/<id>/update` | alan güncelle: `first_step` `cue` `estimate_min` `due_at` `project` `text` (`null` = sil) |
+| `POST /api/tasks/<id>/start` | `{"on": true\|false}` → `started_at` (geçen süre) |
+| `POST /api/focus/start` `POST /api/focus/stop` | 25 dk odak oturumu (`{"minutes", "task_id"?}`) |
 | `POST /api/now` | üst şeritteki tek görev |
+
+`GET /api/state` yanıtına ek alanlar: `streak` (`streak` `today_done` `total_done`
+`active_today`) ve `focus` (`active` `finished` `remaining_sec` `ends_at` `task_text`).
 
 ## Sınırlar (uyulan kurallar)
 
@@ -188,6 +227,8 @@ git add -f config.json data/fikirler.md     # bilerek açığa çıkardıkların
 - Fikirler tek dosyada düz metin; elle eklenen satırlar panoda görünmez (pano yalnız
   kendi eklediklerini listeler).
 - `gh repo list` 15 kayıtla sınırlı (`github.repos_limit`).
-- Odak zamanlayıcı (Pomodoro), görev son tarihi ve etiket filtresi yok — istenirse eklenir.
+- Odak oturumu tek kişiyle sınırlı (yan yana 2 odak yok); 25 dk sabit, özelleştirme UI'da yok.
+- Etiket filtresi yok — proje etiketi görüntüleniyor ama filtrelenemiyor.
+- Görev `due_at` alanına takvim/uyarı üretmiyor; yalnız panoda geri sayım/çip var.
 - Pencere kapanınca sunucu da kapanır (tek süreç). Arka planda durmasını istersen
   `--no-browser` + ayrı servis gerekir.

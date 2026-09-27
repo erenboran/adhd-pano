@@ -70,6 +70,43 @@ def iso_now() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def _txt(value, limit: int) -> str | None:
+    """istemciden gelen metni temizler: kirpilir, fazla bosluk sikistirilir, None olabilir."""
+    s = " ".join(str(value or "").split())
+    if not s:
+        return None
+    return s[:limit]
+
+
+def _int(value, lo: int, hi: int) -> int | None:
+    """guvenli int donusumu — aralik disinda veya sayi degilse None (uydurma yok)."""
+    if value in (None, ""):
+        return None
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return n if lo <= n <= hi else None
+
+
+def _task_flags(t: dict) -> str:
+    """gorev satirina proje + ADHD alanlarini ekler (Hermes export'u icin)."""
+    bits = []
+    if t.get("project"):
+        bits.append(str(t["project"]))
+    if t.get("first_step"):
+        bits.append(f"ilk adim: {t['first_step']}")
+    if t.get("cue"):
+        bits.append(f"uyari: {t['cue']}")
+    if t.get("estimate_min"):
+        bits.append(f"tahmin {t['estimate_min']} dk")
+    if t.get("due_at"):
+        bits.append(f"son {t['due_at']}")
+    if t.get("started_at"):
+        bits.append(f"baslatildi {str(t['started_at'])[:16].replace('T', ' ')}")
+    return ("  — " + " · ".join(bits)) if bits else ""
+
+
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
     path = BASE / "config.json"
@@ -257,7 +294,11 @@ class App:
             ("POST", re.compile(r"^/api/now$"), self.r_set_now),
             ("POST", re.compile(r"^/api/tasks$"), self.r_add_task),
             ("POST", re.compile(r"^/api/tasks/(?P<task_id>\d+)/toggle$"), self.r_toggle_task),
+            ("POST", re.compile(r"^/api/tasks/(?P<task_id>\d+)/update$"), self.r_update_task),
+            ("POST", re.compile(r"^/api/tasks/(?P<task_id>\d+)/start$"), self.r_start_task),
             ("DELETE", re.compile(r"^/api/tasks/(?P<task_id>\d+)$"), self.r_del_task),
+            ("POST", re.compile(r"^/api/focus/start$"), self.r_focus_start),
+            ("POST", re.compile(r"^/api/focus/stop$"), self.r_focus_stop),
         ]
 
     # -------------------------------------------------------------- dispatch
@@ -345,6 +386,8 @@ class App:
             "ideas": self.store.list_ideas(int(self.cfg.get("ideas_limit", 200))),
             "idea_count": self.store.idea_count(),
             "tasks": self.store.list_tasks(),
+            "streak": self.store.streak(),
+            "focus": self.store.focus_state(),
             "uyelikler": self._uyelikler(),
             "export_path": str(self.export_path),
         }
@@ -414,7 +457,13 @@ class App:
         if len(text) > 300:
             return json_resp({"ok": False, "error": "text cok uzun (max 300)"}, 400)
         project = str(data.get("project") or "").strip() or None
-        task = self.store.add_task(text, project)
+        task = self.store.add_task(
+            text, project,
+            first_step=_txt(data.get("first_step"), 200),
+            cue=_txt(data.get("cue"), 200),
+            estimate_min=_int(data.get("estimate_min"), 1, 600),
+            due_at=_txt(data.get("due_at"), 40),
+        )
         log(f"gorev eklendi #{task['id']}: {task['text']}" + (f" [{project}]" if project else ""))
         self.write_export()
         return json_resp({"ok": True, "task": task})
@@ -425,6 +474,73 @@ class App:
             return json_resp({"ok": False, "error": "bulunamadi"}, 404)
         self.write_export()
         return json_resp({"ok": True, "task": res})
+
+    def r_update_task(self, ctx: Ctx):
+        """gorev alanlarini gunceller: ilk adim, uyarI, tahmin, son tarih."""
+        data = ctx.body()
+        tid = int(ctx.params["task_id"])
+        fields = {
+            k: data.get(k)
+            for k in ("first_step", "cue", "estimate_min", "due_at", "project", "text")
+            if k in data
+        }
+        if "estimate_min" in fields:
+            fields["estimate_min"] = _int(fields["estimate_min"], 1, 600)
+        for k in ("first_step", "cue"):
+            if k in fields:
+                fields[k] = _txt(fields[k], 200)
+        if "due_at" in fields:
+            fields["due_at"] = _txt(fields["due_at"], 40)
+        if "text" in fields:
+            if not (fields["text"] or "").strip():
+                return json_resp({"ok": False, "error": "text bos olamaz"}, 400)
+            fields["text"] = _txt(fields["text"], 300)
+        if "project" in fields:
+            fields["project"] = _txt(fields["project"], 60)
+
+        task = self.store.update_task(tid, fields)
+        if task is None:
+            return json_resp({"ok": False, "error": "bulunamadi"}, 404)
+        log(f"gorev guncellendi #{tid}: {sorted(k for k in fields)}")
+        self.write_export()
+        return json_resp({"ok": True, "task": task})
+
+    def r_start_task(self, ctx: Ctx):
+        """gorevi 'baslatildi' isaretler — arayuz gecen sureyi gosterir."""
+        data = ctx.body()
+        on = bool(data.get("on", True))
+        tid = int(ctx.params["task_id"])
+        task = self.store.set_started(tid, on)
+        if task is None:
+            return json_resp({"ok": False, "error": "bulunamadi"}, 404)
+        log(f"gorev {'baslatildi' if on else 'duraklatildi'} #{tid}")
+        self.write_export()
+        return json_resp({"ok": True, "task": task})
+
+    def r_focus_start(self, ctx: Ctx):
+        """odak oturumu — 25 dk geri sayim (baslatma + sureyi gorunur kilma)."""
+        data = ctx.body()
+        minutes = _int(data.get("minutes"), 5, 120) or 25
+        task_id = data.get("task_id")
+        task_id = int(task_id) if str(task_id).isdigit() else None
+        task_text = _txt(data.get("task_text"), 300)
+        if task_id:
+            t = self.store.get_task(task_id)
+            if t is None:
+                return json_resp({"ok": False, "error": "gorev bulunamadi"}, 404)
+            task_text = t["text"]
+        if not task_text:
+            task_text = (self.store.get_now().get("text") or "").strip() or "odak"
+        st = self.store.focus_start(task_id, task_text, minutes)
+        log(f"odak basladi: {minutes} dk — {task_text}")
+        self.write_export()
+        return json_resp({"ok": True, "focus": st})
+
+    def r_focus_stop(self, ctx: Ctx):
+        st = self.store.focus_stop()
+        log("odak kapatildi")
+        self.write_export()
+        return json_resp({"ok": True, "focus": st})
 
     def r_del_task(self, ctx: Ctx):
         ok = self.store.delete_task(int(ctx.params["task_id"]))
@@ -448,6 +564,8 @@ class App:
 
         open_t = [t for t in tasks if not t.get("done")]
         done_t = [t for t in tasks if t.get("done")]
+        focus = self.store.focus_state()
+        streak = self.store.streak()
         lines = [
             "# ADHD panosu — anlik durum (otomatik yazilir)",
             "",
@@ -459,19 +577,27 @@ class App:
             "## SU AN (tek odak)",
             f"- {now.get('text') or '_tanimli degil_'}",
             "",
+            "## Odak / seri",
+            "- odak: " + (
+                f"{focus['minutes']} dk oturum aktif, {focus['remaining_sec']} sn kaldi"
+                + (f" — {focus.get('task_text')}" if focus.get("task_text") else "")
+                if focus.get("active")
+                else ("sure doldu (kapatilmayi bekliyor)" if focus.get("finished") else "oturum yok")
+            ),
+            f"- seri: {streak['streak']} gun art arda · bugun {streak['today_done']} bitis",
+            "",
             f"## Gorevler ({len(open_t)} acik / {len(tasks)} toplam)",
         ]
         if not tasks:
             lines.append("- _gorev yok_")
         for t in open_t:
-            mark = " " + t["project"] if t.get("project") else ""
-            lines.append(f"- [ ] {t['text']}{mark}")
+            lines.append(f"- [ ] {t['text']}" + _task_flags(t))
         if done_t:
             lines.append("")
             lines.append(f"### Tamamlananlar ({len(done_t)})")
             for t in done_t:
                 when = (t.get("done_at") or "")[:16].replace("T", " ")
-                lines.append(f"- [x] {t['text']}" + (f"  — {when}" if when else ""))
+                lines.append(f"- [x] {t['text']}" + (f"  — {when}" if when else "") + _task_flags(t))
 
         lines += ["", f"## Fikirler ({self.store.idea_count()} toplam, son {len(ideas)})"]
         if not ideas:
