@@ -103,7 +103,8 @@ D:\ADHD\
   start_adhd.cmd/.sh      çalıştırıcılar
   setup.cmd               kurulum: .venv + pywebview + test + açılış
   tools/smoke_test.py     uçtan uca otomatik test (port 5078)
-  tools/autostart.py      PC açılışına bağla / kaldır
+  tools/autostart.py      PC açılışına bağla / kaldır (start_boot.vbs üretir)
+  tools/startup_check.py  kurulum + açılış doğrulama raporu (33 kontrol)
   data/adhd.db            SQLite — GİTIGNORE
   data/fikirler.md        fikirlerin insan-okunur kopyası — GİTIGNORE
   data/pano.md            ajan özeti — GİTIGNORE
@@ -116,12 +117,19 @@ D:\ADHD\
 
 ```bash
 python tools/smoke_test.py        # port 5078; çalışan pano ile çakışmaz
+python tools/startup_check.py     # kurulum + otomatik açılış doğrulaması
 ```
 
 Kapsadıkları: soğuk başlangıçta donma yok (<1 sn), gerçek repo/branch/commit verisi,
 cache TTL, zorla yenileme, fikir/görev/«ŞU AN» yazımı (`fikirler.md` + `pano.md`),
 404/405/path-traversal, timeout yolunda `bilinmiyor` davranışı, CDN referansı yok,
 WebView2 + pywebview hazır olup olmadığı.
+
+`startup_check.py` ayrıca şunları doğrular: `webview` (pywebview) import edilebiliyor,
+`gh` CLI sürümü, dosyalar UTF-8, README bölümleri, port 5077 + `server.lock` canlı mı,
+`Startup\ADHD Pano.vbs` kaynakla aynı mı, VBS içindeki python/app yolları var mı ve o
+python `webview` kurabiliyor mu, gizli+kademeli başlangıç, ekran sayısı, disk, `pano.log`
+hatasız. Çıktı `--json` ile makine-okunur; **`KALDI` yoksa çıkış 0**.
 
 ## Elle test (senin yapman gereken)
 
@@ -143,6 +151,8 @@ WebView2 + pywebview hazır olup olmadığı.
    ama logda `[BILGI] ... zaten calisiyor` yazmalı, `Get-NetTCPConnection` 5077 tek dinleyici göstermeli.
 7. **PC açılışı:** `python tools\autostart.py install` → bilgisayarı yeniden başlat →
    pano konsolsuz kendiliğinden açılmalı. `uninstall` ile geri alınmalı.
+8. **Doğrulama raporu:** `python tools\startup_check.py` → **33 GECTI, 0 KALDI**
+   görmelisin (autostart kurulu değilse ilgili satırlar `ATLANDI` olur, `KALDI` olmaz).
 
 ## API
 

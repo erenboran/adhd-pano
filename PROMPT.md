@@ -40,6 +40,8 @@ baştan sona oku, sonra uygula. Çelişki varsa spec kazanır.
 ## Doğrulama (bitirmeden önce yap ve çıktıyı göster)
 
 1. `python D:/ADHD/tools/smoke_test.py` → `TUM TESTLER GECTI` (veya `[FAIL]` satırları).
+2. `python D:/ADHD/tools/startup_check.py` → **0 KALDI** (autostart kurulu değilse
+   ilgili satırlar `ATLANDI` olur).
 2. `curl -s http://127.0.0.1:5077/api/state` → gerçek repo adları, branch'ler, gh hesabı
    (ilk 40 satır JSON).
 3. Fikir ekle → `data/fikirler.md` **ve** `data/pano.md` içinde o satır; sonra sil.
